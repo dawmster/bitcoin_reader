@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path"
@@ -10,13 +12,16 @@ import (
 	"syscall"
 	"time"
 
+	// "github.com/btcsuite/btcd/wire"
 	"github.com/tokenized/bitcoin_reader"
 	"github.com/tokenized/bitcoin_reader/headers"
 	"github.com/tokenized/config"
 	"github.com/tokenized/pkg/bitcoin"
 	"github.com/tokenized/pkg/logger"
+	"github.com/tokenized/pkg/merkle_proof"
 	"github.com/tokenized/pkg/storage"
 	"github.com/tokenized/pkg/threads"
+	"github.com/tokenized/pkg/wire"
 
 	"github.com/pkg/errors"
 )
@@ -27,9 +32,92 @@ var (
 	buildUser    = "unknown"
 )
 
+type Miko_TxProcessor struct { // implements interface bitcoin_reader.TxProcessor
+	nic int
+}
+
+func (tp Miko_TxProcessor) ProcessTx(ctx context.Context, tx *wire.MsgTx) (bool, error) {
+	fmt.Println("-TX-")
+	// for _, value := range tx.TxIn {
+	// 	fmt.Print(" %s", value.PreviousOutPoint.String())
+	// }
+	for _, value := range tx.TxOut {
+		fmt.Print(" %s", value.LockingScript.String())
+		// fmt.Print(" %s", value.LockingScript.MarshalJSON())
+	}
+	fmt.Println("--")
+
+	return false, nil
+}
+
+//this is taken from tokenized/pkg/bitcoin/script.go by me. Miko.
+// ScriptToStrings converts a bitcoin script into a array of text representation - for each opcode and data.
+func ScriptToStrings(script bitcoin.Script) []string {
+	var result []string
+	buf := bytes.NewReader(script)
+
+	for {
+		item, err := bitcoin.ParseScript(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			continue
+		}
+
+		result = append(result, item.String())
+	}
+
+	return result
+}
+
+// ScriptToScriptItems converts a bitcoin script into a array of text representation - for each opcode and data.
+func ScriptToScriptItems(script bitcoin.Script) []bitcoin.ScriptItem {
+	var result []bitcoin.ScriptItem
+	buf := bytes.NewReader(script)
+
+	for {
+		item, err := bitcoin.ParseScript(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			continue
+		}
+
+		result = append(result, *item)
+	}
+
+	return result
+}
+
+func (tp Miko_TxProcessor) CancelTx(ctx context.Context, txid bitcoin.Hash32) error {
+
+	return nil
+}
+
+func (tp Miko_TxProcessor) AddTxConflict(ctx context.Context, txid, conflictTxID bitcoin.Hash32) error {
+	return nil
+}
+
+func (tp Miko_TxProcessor) ConfirmTx(ctx context.Context, txid bitcoin.Hash32, blockHeight int,
+	merkleProof *merkle_proof.MerkleProof) error {
+
+	return nil
+}
+
+func (tp Miko_TxProcessor) UpdateTxChainDepth(ctx context.Context, txid bitcoin.Hash32, chainDepth uint32) error {
+	return nil
+}
+
+func (tp Miko_TxProcessor) ProcessCoinbaseTx(ctx context.Context, blockHash bitcoin.Hash32, tx *wire.MsgTx) error {
+	return nil
+}
+
 func main() {
 	// ---------------------------------------------------------------------------------------------
 	// Logging
+	fmt.Println("start:")
 
 	logPath := "./tmp/node/node.log"
 	if len(logPath) > 0 {
@@ -99,9 +187,10 @@ func main() {
 	// Processing
 
 	// processor := platform.NewMockDataProcessor()
+	processor := new(Miko_TxProcessor)
 
 	txManager := bitcoin_reader.NewTxManager(2 * time.Second)
-	// txManager.SetTxProcessor(processor)
+	txManager.SetTxProcessor(*processor)
 	manager.SetTxManager(txManager)
 	stopper.Add(txManager)
 

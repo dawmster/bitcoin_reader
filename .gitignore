@@ -1,4 +1,4 @@
-
+vendor/
 *.exe
 *.test
 *.prof
@@ -7,3 +7,6 @@
 tmp
 dist
 .vscode/
+cmd/node/main
+cmd/node/out.txt
+out.txt
