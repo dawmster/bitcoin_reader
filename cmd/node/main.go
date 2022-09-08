@@ -42,7 +42,7 @@ func (tp Miko_TxProcessor) ProcessTx(ctx context.Context, tx *wire.MsgTx) (bool,
 	// 	fmt.Print(" %s", value.PreviousOutPoint.String())
 	// }
 	for _, value := range tx.TxOut {
-		fmt.Print(" %s", value.LockingScript.String())
+		fmt.Print(" %v", value.LockingScript.String())
 		// fmt.Print(" %s", value.LockingScript.MarshalJSON())
 	}
 	fmt.Println("--")
