@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	// "github.com/btcsuite/btcd/wire"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/tokenized/bitcoin_reader"
 	"github.com/tokenized/bitcoin_reader/headers"
 	"github.com/tokenized/config"
@@ -21,6 +19,7 @@ import (
 	"github.com/tokenized/pkg/bitcoin"
 	"github.com/tokenized/pkg/merkle_proof"
 	"github.com/tokenized/pkg/storage"
+	"github.com/tokenized/pkg/wire"
 	"github.com/tokenized/threads"
 
 	"github.com/pkg/errors"
@@ -188,6 +187,20 @@ func main() {
 	// stopper.Add(processBlocksThread)
 
 	// ---------------------------------------------------------------------------------------------
+	// Processing
+
+	// processor := platform.NewMockDataProcessor()
+	processor := new(Miko_TxProcessor)
+
+	txManager := bitcoin_reader.NewTxManager(2 * time.Second)
+	txManager.SetTxProcessor(*processor)
+	manager.SetTxManager(txManager)
+	stopper.Add(txManager)
+
+	processTxThread, processTxComplete := threads.NewUninterruptableThreadComplete("Process Txs", txManager.Run, &wait)
+	stopper.Add(txManager)
+
+	// ---------------------------------------------------------------------------------------------
 	// Periodic
 
 	saveThread, saveComplete := threads.NewPeriodicThreadComplete("Save",
@@ -203,7 +216,7 @@ func main() {
 	stopper.Add(saveThread)
 
 	previousTime := time.Now()
-	cleanTxsThread, cleanTxsComplete := threads.NewPeriodicThreadComplete("Clean Txs",
+	cleanTxsThread /*cleanTxsComplete*/, _ := threads.NewPeriodicThreadComplete("Clean Txs",
 		func(ctx context.Context) error {
 			if err := txManager.Clean(ctx, previousTime); err != nil {
 				return errors.Wrap(err, "clean tx manager")

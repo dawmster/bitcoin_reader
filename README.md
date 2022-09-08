@@ -15,4 +15,3 @@ To run:
 - `go run main.go  > out.txt ; tail -f out.txt`
 
 To stop press Ctrl+C.
-Somehow printout is only presented *after* Ctrl+C.
