@@ -10,3 +10,4 @@ dist
 cmd/node/main
 cmd/node/out.txt
 out.txt
+go.sum
