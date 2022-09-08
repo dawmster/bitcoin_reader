@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tokenized/logger"
 	"github.com/tokenized/pkg/bitcoin"
-	"github.com/tokenized/pkg/logger"
-	"github.com/tokenized/pkg/threads"
 	"github.com/tokenized/pkg/wire"
+	"github.com/tokenized/threads"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -172,10 +172,12 @@ func (n *BitcoinNode) IsBusy() bool {
 
 func (n *BitcoinNode) HasBlock(ctx context.Context, hash bitcoin.Hash32, height int) bool {
 	n.Lock()
-	ctx = logger.ContextWithLogFields(ctx, logger.Stringer("connection", n.id))
+	id := n.id
 	lastRequestedBlock := n.lastRequestedBlock
 	lastHeaderHash := n.lastHeaderHash
 	n.Unlock()
+
+	ctx = logger.ContextWithLogFields(ctx, logger.Stringer("connection", id))
 
 	if lastRequestedBlock != nil && lastRequestedBlock.Equal(&hash) {
 		logger.Verbose(ctx, "Already requested block from this node")
@@ -362,14 +364,19 @@ func (n *BitcoinNode) SetTxHandler(handler MessageHandlerFunction) {
 }
 
 func (n *BitcoinNode) Run(ctx context.Context, interrupt <-chan interface{}) error {
-	logger.Verbose(ctx, "Connecting to %s", n.address)
+	logger.VerboseWithFields(ctx, []logger.Field{
+		logger.String("address", n.address),
+	}, "Connecting to node")
 
 	if err := n.connect(ctx); err != nil {
 		n.Lock()
 		n.isReady = false
 		n.isStopped = true
 		n.Unlock()
-		return errors.Wrap(err, "connect")
+		logger.VerboseWithFields(ctx, []logger.Field{
+			logger.String("address", n.address),
+		}, "Failed to connect to node : %s", err)
+		return nil
 	}
 
 	n.outgoingMsgChannel.Open(1000)
@@ -379,20 +386,17 @@ func (n *BitcoinNode) Run(ctx context.Context, interrupt <-chan interface{}) err
 
 	stopper.Add(n) // close connection and outgoing channel to stop incoming and outgoing threads
 
-	readIncomingThread := threads.NewThreadWithoutStop("Read Incoming", n.readIncoming)
-	readIncomingThread.SetWait(&wait)
-	readIncomingComplete := readIncomingThread.GetCompleteChannel()
+	readIncomingThread, readIncomingComplete := threads.NewUninterruptableThreadComplete("Read Incoming",
+		n.readIncoming, &wait)
 
-	sendOutgoingThread := threads.NewThreadWithoutStop("Send Outgoing", n.sendOutgoing)
-	sendOutgoingThread.SetWait(&wait)
-	sendOutgoingComplete := sendOutgoingThread.GetCompleteChannel()
+	sendOutgoingThread, sendOutgoingComplete := threads.NewUninterruptableThreadComplete("Send Outgoing",
+		n.sendOutgoing, &wait)
 
-	pingThread := threads.NewPeriodicTask("Ping", 10*time.Minute, n.sendPing)
-	pingThread.SetWait(&wait)
-	pingComplete := pingThread.GetCompleteChannel()
+	pingThread, pingComplete := threads.NewPeriodicThreadComplete("Ping", n.sendPing,
+		10*time.Minute, &wait)
 	stopper.Add(pingThread)
 
-	handshakeThread := threads.NewThread("Handshake", n.handshake)
+	handshakeThread := threads.NewInterruptableThread("Handshake", n.handshake)
 	handshakeThread.SetWait(&wait)
 	stopper.Add(handshakeThread)
 

@@ -13,15 +13,14 @@ import (
 	"time"
 
 	// "github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/tokenized/bitcoin_reader"
 	"github.com/tokenized/bitcoin_reader/headers"
 	"github.com/tokenized/config"
 	"github.com/tokenized/logger"
 	"github.com/tokenized/pkg/bitcoin"
-
 	"github.com/tokenized/pkg/merkle_proof"
 	"github.com/tokenized/pkg/storage"
-	"github.com/tokenized/pkg/wire"
 	"github.com/tokenized/threads"
 
 	"github.com/pkg/errors"
@@ -179,29 +178,11 @@ func main() {
 		BlockRequestDelay:       config.NewDuration(time.Second * 5),
 	}
 	manager := bitcoin_reader.NewNodeManager(userAgent, nodeConfig, headers, peers)
-	managerThread, managerComplete := threads.NewInterruptableThreadComplete("Node Manager", manager.Run, &wait)
+	managerThread, managerComplete := threads.NewInterruptableThreadComplete("Node Manager",
+		manager.Run, &wait)
 	stopper.Add(managerThread)
-
-	// ---------------------------------------------------------------------------------------------
-	// Processing
-
-	// processor := platform.NewMockDataProcessor()
-	processor := new(Miko_TxProcessor)
-
-	txManager := bitcoin_reader.NewTxManager(2 * time.Second)
-	txManager.SetTxProcessor(*processor)
-	manager.SetTxManager(txManager)
-	stopper.Add(txManager)
-
-	processTxThread, processTxComplete := threads.NewUninterruptableThreadComplete("Process Txs", txManager.Run, &wait)
-	stopper.Add(txManager)
-
-	// blockManager := bitcoin_reader.NewBlockManager(store, manager,
-	// nodeConfig.ConcurrentBlockRequests, nodeConfig.BlockRequestDelay)
-	// manager.SetBlockManager(blockTxManager, blockManager, processor)
 	// stopper.Add(blockManager)
 
-	// processBlocksThread := threads.NewThread("Process Blocks", blockManager.Run)
 	// processBlocksThread.SetWait(&wait)
 	// processBlocksComplete := processBlocksThread.GetCompleteChannel()
 	// stopper.Add(processBlocksThread)
@@ -229,7 +210,6 @@ func main() {
 			}
 			previousTime = time.Now()
 			return nil
-		})
 		}, 5*time.Minute, &wait)
 	stopper.Add(cleanTxsThread)
 
@@ -253,18 +233,10 @@ func main() {
 		logger.Warn(ctx, "Finished: Manager")
 
 	case <-saveComplete:
-		logger.Warn(ctx, "Finished: Save")
-
-	case <-cleanTxsComplete:
-		logger.Warn(ctx, "Finished: Clean Txs")
 
 	case <-processTxComplete:
 		logger.Warn(ctx, "Finished: Process Txs")
 
-	// case <-processBlocksComplete:
-	// logger.Warn(ctx, "Finished: Process Blocks")
-
-	case <-osSignals:
 		logger.Info(ctx, "Shutdown requested")
 	}
 
